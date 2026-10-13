@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片二维码替换工具</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    background: #f4f6fa;
+    color: #1f2733;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid #e3e8f0;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 0 0 auto;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .5px; }
+  header .hint { font-size: 12px; color: #8b97a8; }
+
+  .layout { flex: 1 1 auto; display: flex; min-height: 0; }
+
+  aside {
+    width: 300px;
+    flex: 0 0 auto;
+    padding: 16px;
+    border-right: 1px solid #e3e8f0;
+    background: #ffffff;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .drop {
+    border: 2px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 18px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: .18s;
+    background: #f8fafc;
+    position: relative;
+  }
+  .drop:hover { border-color: #4a90ff; background: #eef4ff; }
+  .drop.dragover { border-color: #4a90ff; background: #e6efff; box-shadow: 0 0 0 3px rgba(74,144,255,.15); }
+  .drop.filled { border-style: solid; border-color: #4caf7d; background: #f6fdf9; }
+  .drop .title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .drop .sub { font-size: 11px; color: #8b97a8; line-height: 1.6; }
+  .drop .thumb {
+    margin-top: 10px;
+    max-width: 100%;
+    max-height: 90px;
+    border-radius: 6px;
+    display: none;
+    object-fit: contain;
+    background:
+      linear-gradient(45deg, #e2e8f0 25%, transparent 25%, transparent 75%, #e2e8f0 75%),
+      linear-gradient(45deg, #e2e8f0 25%, transparent 25%, transparent 75%, #e2e8f0 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+    background-color: #ffffff;
+  }
+  .drop.filled .thumb { display: inline-block; }
+  .drop.filled .sub { display: none; }
+  .drop .del {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 22px; height: 22px;
+    padding: 0; line-height: 1;
+    border-radius: 50%;
+    border: 1px solid #d5dde8;
+    background: #ffffff;
+    color: #8895a7;
+    font-size: 15px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: .15s;
+  }
+  .drop.filled .del { display: flex; }
+  .drop .del:hover { background: #ffecec; border-color: #ff9c9c; color: #e4483d; }
+
+  .field { font-size: 12px; color: #5b6878; display: flex; flex-direction: column; gap: 6px; }
+  .field select, .field input[type=range] { width: 100%; }
+  .field select {
+    background: #ffffff; color: #1f2733; border: 1px solid #d5dde8;
+    border-radius: 8px; padding: 8px; font-size: 12px;
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+  button.primary {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #3f7bff, #6a4bff);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: .18s;
+  }
+  button.primary:hover:not(:disabled) { filter: brightness(1.12); }
+  button.primary:disabled { opacity: .4; cursor: not-allowed; }
+  button.ghost {
+    background: #ffffff; border: 1px solid #d5dde8; color: #5b6878;
+    border-radius: 8px; padding: 7px 10px; font-size: 12px; cursor: pointer;
+  }
+  button.ghost:hover { border-color: #4a90ff; color: #3f7bff; background: #f2f7ff; }
+
+  .meta { font-size: 11px; color: #8b97a8; line-height: 1.7; }
+  .meta b { color: #44506a; font-weight: 600; }
+
+  .stage-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background:
+      radial-gradient(circle at 50% 40%, #ffffff 0%, #e9edf4 75%);
+  }
+  .stage {
+    position: relative;
+    line-height: 0;
+    box-shadow: 0 10px 30px rgba(31,39,51,.16);
+    display: none;
+    touch-action: none;
+  }
+  .stage canvas { display: block; border-radius: 2px; }
+
+  .placeholder { color: #a8b3c2; font-size: 14px; text-align: center; line-height: 2; }
+  .placeholder .big { font-size: 40px; display: block; margin-bottom: 6px; opacity: .6; }
+
+  .qr-box {
+    position: absolute;
+    border: 2px dashed rgba(63,123,255,.9);
+    cursor: move;
+    transform-origin: center;
+    background:
+      linear-gradient(45deg, rgba(120,140,170,.22) 25%, transparent 25%, transparent 75%, rgba(120,140,170,.22) 75%),
+      linear-gradient(45deg, rgba(120,140,170,.22) 25%, transparent 25%, transparent 75%, rgba(120,140,170,.22) 75%);
+    background-size: 14px 14px;
+    background-position: 0 0, 7px 7px;
+    touch-action: none;
+    user-select: none;
+  }
+  .qr-box img { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
+  .qr-box .handle {
+    position: absolute;
+    width: 16px; height: 16px;
+    background: #4a90ff;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(31,39,51,.3);
+    touch-action: none;
+  }
+  .qr-box .handle.tl { left: -9px; top: -9px; cursor: nwse-resize; }
+  .qr-box .handle.tr { right: -9px; top: -9px; cursor: nesw-resize; }
+  .qr-box .handle.bl { left: -9px; bottom: -9px; cursor: nesw-resize; }
+  .qr-box .handle.br { right: -9px; bottom: -9px; cursor: nwse-resize; }
+  .qr-box .tag {
+    position: absolute;
+    top: -26px; left: 0;
+    font-size: 11px;
+    color: #ffffff;
+    background: rgba(63,123,255,.92);
+    padding: 2px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    pointer-events: none;
+    line-height: 1.6;
+    display: none;
+  }
+  .qr-box.active .tag { display: block; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #ffffff; border: 1px solid #d5dde8; color: #1f2733;
+    box-shadow: 0 6px 24px rgba(31,39,51,.16);
+    padding: 10px 18px; border-radius: 10px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: .25s; z-index: 99;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 760px) {
+    .layout { flex-direction: column-reverse; }
+    aside { width: 100%; max-height: 46%; border-right: none; border-bottom: 1px solid #e3e8f0; }
+    .stage-wrap { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>图片二维码替换工具</h1>
+  <span class="hint">上传原图与二维码 → 拖动 / 缩放 → 生成下载（输出尺寸与原图像素完全一致）</span>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="drop" id="dropOrig">
+      <div class="title">① 上传原图</div>
+      <div class="sub">点击选择，或把图片拖到这里</div>
+      <img class="thumb" id="thumbOrig" alt="">
+      <button class="del" id="delOrig" type="button" title="删除原图">×</button>
+      <input type="file" id="fileOrig" accept="image/*" hidden>
+    </div>
+
+    <div class="drop" id="dropQr">
+      <div class="title">② 上传二维码</div>
+      <div class="sub">点击选择，或把二维码图片拖到这里</div>
+      <img class="thumb" id="thumbQr" alt="">
+      <button class="del" id="delQr" type="button" title="删除二维码">×</button>
+      <input type="file" id="fileQr" accept="image/*" hidden>
+    </div>
+
+    <div class="field">
+      <div class="row"><span>二维码不透明度</span><span id="opacityVal">100%</span></div>
+      <input type="range" id="qrOpacity" min="10" max="100" value="100">
+    </div>
+
+    <div class="field">
+      <span>输出格式</span>
+      <select id="outFormat">
+        <option value="same">跟随原图格式</option>
+        <option value="image/png">PNG</option>
+        <option value="image/jpeg">JPEG</option>
+        <option value="image/webp">WEBP</option>
+      </select>
+    </div>
+
+    <div class="row" style="gap:8px">
+      <button class="ghost" id="btnCenter" title="把二维码放到图片正中央">居中</button>
+      <button class="ghost" id="btnFit" title="按图片短边的比例设置二维码大小">默认大小</button>
+      <button class="ghost" id="btnReset" title="清除全部内容">清空</button>
+    </div>
+
+    <button class="primary" id="btnDownload" disabled>生成并下载图片</button>
+
+    <div class="meta" id="meta"></div>
+  </aside>
+
+  <div class="stage-wrap" id="stageWrap">
+    <div class="placeholder" id="placeholder">
+      <span class="big">🖼️</span>
+      先上传一张原图<br>再上传二维码，即可在图上拖动与缩放
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="baseCanvas"></canvas>
+      <div class="qr-box" id="qrBox">
+        <span class="tag" id="qrTag"></span>
+        <img id="qrImg" alt="">
+        <div class="handle tl" data-corner="tl"></div>
+        <div class="handle tr" data-corner="tr"></div>
+        <div class="handle bl" data-corner="bl"></div>
+        <div class="handle br" data-corner="br"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var state = {
+    origImg: null,
+    origFile: null,
+    qrImg: null,
+    qrFile: null,
+    // 二维码位置与尺寸，全部用相对于原图的比例(0~1)保存，做到分辨率无关
+    qr: { fx: 0.5, fy: 0.5, fw: 0.22, aspect: 1 },
+    displayScale: 1,
+    opacity: 1,
+    inited: false
+  };
+
+  var els = {
+    dropOrig: document.getElementById("dropOrig"),
+    dropQr: document.getElementById("dropQr"),
+    fileOrig: document.getElementById("fileOrig"),
+    fileQr: document.getElementById("fileQr"),
+    thumbOrig: document.getElementById("thumbOrig"),
+    thumbQr: document.getElementById("thumbQr"),
+    delOrig: document.getElementById("delOrig"),
+    delQr: document.getElementById("delQr"),
+    stageWrap: document.getElementById("stageWrap"),
+    stage: document.getElementById("stage"),
+    canvas: document.getElementById("baseCanvas"),
+    qrBox: document.getElementById("qrBox"),
+    qrImg: document.getElementById("qrImg"),
+    qrTag: document.getElementById("qrTag"),
+    placeholder: document.getElementById("placeholder"),
+    opacity: document.getElementById("qrOpacity"),
+    opacityVal: document.getElementById("opacityVal"),
+    outFormat: document.getElementById("outFormat"),
+    btnDownload: document.getElementById("btnDownload"),
+    btnCenter: document.getElementById("btnCenter"),
+    btnFit: document.getElementById("btnFit"),
+    btnReset: document.getElementById("btnReset"),
+    toast: document.getElementById("toast"),
+    meta: document.getElementById("meta")
+  };
+
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { els.toast.classList.remove("show"); }, 2200);
+  }
+
+  /* ---------------- 文件读取 ---------------- */
+  function readImage(file, cb) {
+    if (!file || !/^image\//.test(file.type)) { toast("请选择图片文件"); return; }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () { cb(img, file); };
+      img.onerror = function () { toast("图片解析失败"); };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function wireDrop(zone, input, onFile) {
+    // 点击选择：input 在 zone 内部，程序化 input.click() 会冒泡回 zone，
+    // 必须挡掉自身事件，否则会无限递归导致文件框打不开
+    zone.addEventListener("click", function (e) {
+      if (e.target === input) return;
+      e.stopPropagation();
+      input.click();
+    });
+    input.addEventListener("click", function (e) { e.stopPropagation(); });
+    input.addEventListener("change", function () {
+      if (input.files && input.files[0]) onFile(input.files[0]);
+      input.value = "";
+    });
+
+    function stop(e) { e.preventDefault(); e.stopPropagation(); }
+
+    zone.addEventListener("dragenter", function (e) {
+      stop(e);
+      zone.classList.add("dragover");
+    });
+    zone.addEventListener("dragover", function (e) {
+      stop(e);
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+      zone.classList.add("dragover");
+    });
+    zone.addEventListener("dragleave", function (e) {
+      stop(e);
+      if (zone.contains(e.relatedTarget)) return;
+      zone.classList.remove("dragover");
+    });
+    zone.addEventListener("drop", function (e) {
+      stop(e);
+      zone.classList.remove("dragover");
+      var dt = e.dataTransfer;
+      var file = null;
+      if (dt) {
+        if (dt.files && dt.files.length) file = dt.files[0];
+        else if (dt.items && dt.items.length) {
+          for (var i = 0; i < dt.items.length; i++) {
+            if (dt.items[i].kind === "file") { file = dt.items[i].getAsFile(); break; }
+          }
+        }
+      }
+      if (!file) { toast("未检测到文件，请把图片文件拖到框内"); return; }
+      onFile(file);
+    });
+  }
+
+  // 防止把文件拖到页面空白处时浏览器直接打开图片
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) { e.preventDefault(); });
+
+  /* ---------------- 原图处理 ---------------- */
+  function setOriginal(img, file) {
+    state.origImg = img;
+    state.origFile = file;
+    els.thumbOrig.src = img.src;
+    els.dropOrig.classList.add("filled");
+    els.placeholder.style.display = "none";
+    els.stage.style.display = "inline-block";
+
+    var c = els.canvas;
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    var ctx = c.getContext("2d");
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0);
+
+    // 首次放置二维码时给一个合适默认尺寸
+    if (!state.inited) {
+      state.qr.fw = Math.min(0.35, Math.max(0.12, 260 / img.naturalWidth));
+      state.inited = true;
+    }
+
+    fitStage();
+    layoutQR();
+    updateMeta();
+    updateDownloadState();
+  }
+
+  /* ---------------- 二维码处理 ---------------- */
+  function setQr(img, file) {
+    state.qrImg = img;
+    state.qrFile = file;
+    els.thumbQr.src = img.src;
+    els.dropQr.classList.add("filled");
+    els.qrImg.src = img.src;
+    state.qr.aspect = img.naturalHeight / img.naturalWidth;
+    layoutQR();
+    updateMeta();
+    updateDownloadState();
+    if (state.origImg) toast("二维码已就位，拖动移动、拖四角缩放");
+    else toast("二维码已上传，再上传原图即可看到");
+  }
+
+  function updateDownloadState() {
+    els.btnDownload.disabled = !(state.origImg && state.qrImg);
+  }
+
+  /* ---------------- 删除已上传文件 ---------------- */
+  function removeOriginal() {
+    state.origImg = null;
+    state.origFile = null;
+    els.dropOrig.classList.remove("filled");
+    els.thumbOrig.removeAttribute("src");
+    els.canvas.getContext("2d").clearRect(0, 0, els.canvas.width, els.canvas.height);
+    els.stage.style.display = "none";
+    els.qrBox.style.display = "none";
+    els.placeholder.style.display = "block";
+    updateMeta();
+    updateDownloadState();
+    toast("已删除原图，可重新上传");
+  }
+
+  function removeQr() {
+    state.qrImg = null;
+    state.qrFile = null;
+    els.dropQr.classList.remove("filled");
+    els.thumbQr.removeAttribute("src");
+    els.qrImg.removeAttribute("src");
+    els.qrBox.style.display = "none";
+    updateMeta();
+    updateDownloadState();
+    toast("已删除二维码，可重新上传");
+  }
+
+  /* ---------------- 显示区自适应 ---------------- */
+  function fitStage() {
+    if (!state.origImg) return;
+    var nw = state.origImg.naturalWidth;
+    var nh = state.origImg.naturalHeight;
+    var availW = els.stageWrap.clientWidth - 48;
+    var availH = els.stageWrap.clientHeight - 48;
+    if (availW < 50) availW = 50;
+    if (availH < 50) availH = 50;
+    var scale = Math.min(availW / nw, availH / nh);
+    state.displayScale = scale;
+    var dw = Math.max(1, Math.round(nw * scale));
+    var dh = Math.max(1, Math.round(nh * scale));
+    els.canvas.style.width = dw + "px";
+    els.canvas.style.height = dh + "px";
+    els.stage.style.width = dw + "px";
+    els.stage.style.height = dh + "px";
+  }
+
+  function layoutQR() {
+    if (!state.origImg || !state.qrImg) return;
+    var nw = state.origImg.naturalWidth;
+    var nh = state.origImg.naturalHeight;
+    var dw = nw * state.displayScale;
+    var dh = nh * state.displayScale;
+
+    var w = state.qr.fw * dw;
+    var h = w * state.qr.aspect;
+    var cx = state.qr.fx * dw;
+    var cy = state.qr.fy * dh;
+
+    els.qrBox.style.width = w + "px";
+    els.qrBox.style.height = h + "px";
+    els.qrBox.style.left = (cx - w / 2) + "px";
+    els.qrBox.style.top = (cy - h / 2) + "px";
+    els.qrBox.style.display = "block";
+    els.qrBox.style.opacity = String(state.opacity);
+    els.qrTag.textContent = "拖动移动 · 拖四角等比缩放";
+  }
+
+  /* ---------------- 拖动 / 四角缩放 ---------------- */
+  var drag = null;
+
+  els.qrBox.addEventListener("pointerdown", function (e) {
+    if (!state.origImg || !state.qrImg) return;
+    var isHandle = e.target.classList && e.target.classList.contains("handle");
+    e.preventDefault();
+    e.stopPropagation();
+    els.qrBox.classList.add("active");
+
+    var dw = state.origImg.naturalWidth * state.displayScale;
+    var dh = state.origImg.naturalHeight * state.displayScale;
+
+    if (!isHandle) {
+      els.qrBox.setPointerCapture(e.pointerId);
+      drag = {
+        mode: "move",
+        startX: e.clientX,
+        startY: e.clientY,
+        fx: state.qr.fx,
+        fy: state.qr.fy,
+        dw: dw,
+        dh: dh
+      };
+      return;
+    }
+
+    // 四个角：用“对角固定”的方式等比缩放，拖动时保持当前大小不跳变
+    e.target.setPointerCapture(e.pointerId);
+    var left = parseFloat(els.qrBox.style.left) || 0;
+    var top = parseFloat(els.qrBox.style.top) || 0;
+    var w = els.qrBox.offsetWidth;
+    var h = els.qrBox.offsetHeight;
+    var corner = e.target.getAttribute("data-corner");
+    var fixedX, fixedY;
+    if (corner === "br") { fixedX = left; fixedY = top; }            // 固定左上
+    else if (corner === "tl") { fixedX = left + w; fixedY = top + h; } // 固定右下
+    else if (corner === "tr") { fixedX = left; fixedY = top + h; }     // 固定左下
+    else { fixedX = left + w; fixedY = top; }                          // bl 固定右上
+
+    drag = {
+      mode: "resize",
+      corner: corner,
+      fixedX: fixedX,
+      fixedY: fixedY,
+      aspect: state.qr.aspect,
+      dw: dw,
+      dh: dh
+    };
+  });
+
+  window.addEventListener("pointermove", function (e) {
+    if (!drag) return;
+    e.preventDefault();
+
+    if (drag.mode === "move") {
+      var dx = (e.clientX - drag.startX) / drag.dw;
+      var dy = (e.clientY - drag.startY) / drag.dh;
+      state.qr.fx = clamp(drag.fx + dx, -0.2, 1.2);
+      state.qr.fy = clamp(drag.fy + dy, -0.2, 1.2);
+      layoutQR();
+      return;
+    }
+
+    // resize：把鼠标坐标换算到舞台内部坐标，避免跨坐标系导致突然变大
+    var rect = els.stage.getBoundingClientRect();
+    var lx = e.clientX - rect.left;
+    var ly = e.clientY - rect.top;
+
+    var fromX = Math.abs(lx - drag.fixedX);
+    var fromY = Math.abs(ly - drag.fixedY) / (drag.aspect || 1);
+    var newW = Math.max(fromX, fromY);
+    newW = clamp(newW, 16, drag.dw * 3);
+    var newH = newW * drag.aspect;
+
+    var c = drag.corner;
+    var nx, ny;
+    if (c === "br") { nx = drag.fixedX; ny = drag.fixedY; }
+    else if (c === "tl") { nx = drag.fixedX - newW; ny = drag.fixedY - newH; }
+    else if (c === "tr") { nx = drag.fixedX; ny = drag.fixedY - newH; }
+    else { nx = drag.fixedX - newW; ny = drag.fixedY; }
+
+    state.qr.fw = newW / drag.dw;
+    state.qr.fx = (nx + newW / 2) / drag.dw;
+    state.qr.fy = (ny + newH / 2) / drag.dh;
+    layoutQR();
+  });
+
+  function endDrag(e) {
+    if (!drag) return;
+    drag = null;
+    els.qrBox.classList.remove("active");
+  }
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+
+  /* ---------------- 工具按钮 ---------------- */
+  els.btnCenter.addEventListener("click", function () {
+    if (!state.qrImg) return;
+    state.qr.fx = 0.5; state.qr.fy = 0.5;
+    layoutQR();
+  });
+  els.btnFit.addEventListener("click", function () {
+    if (!state.origImg || !state.qrImg) return;
+    state.qr.fw = Math.min(0.35, Math.max(0.12, 260 / state.origImg.naturalWidth));
+    state.qr.fx = 0.5; state.qr.fy = 0.5;
+    layoutQR();
+  });
+  els.btnReset.addEventListener("click", function () {
+    state.origImg = null; state.qrImg = null; state.origFile = null; state.qrFile = null;
+    state.qr = { fx: 0.5, fy: 0.5, fw: 0.22, aspect: 1 };
+    state.inited = false;
+    els.dropOrig.classList.remove("filled");
+    els.dropQr.classList.remove("filled");
+    els.thumbOrig.removeAttribute("src");
+    els.thumbQr.removeAttribute("src");
+    els.qrImg.removeAttribute("src");
+    els.qrBox.style.display = "none";
+    els.stage.style.display = "none";
+    els.placeholder.style.display = "block";
+    els.meta.textContent = "";
+    els.btnDownload.disabled = true;
+  });
+
+  els.opacity.addEventListener("input", function () {
+    state.opacity = els.opacity.value / 100;
+    els.opacityVal.textContent = els.opacity.value + "%";
+    layoutQR();
+  });
+
+  /* ---------------- 生成下载 ---------------- */
+  els.btnDownload.addEventListener("click", function () {
+    if (!state.origImg || !state.qrImg) return;
+    var nw = state.origImg.naturalWidth;
+    var nh = state.origImg.naturalHeight;
+
+    var out = document.createElement("canvas");
+    out.width = nw;          // 与原图像素尺寸完全一致
+    out.height = nh;
+    var ctx = out.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    // 1. 画原图（全分辨率，不做任何重采样缩放，清晰度不变）
+    ctx.drawImage(state.origImg, 0, 0, nw, nh);
+
+    // 2. 按比例把二维码画到全分辨率坐标上
+    var w = state.qr.fw * nw;
+    var h = w * state.qr.aspect;
+    var cx = state.qr.fx * nw;
+    var cy = state.qr.fy * nh;
+    ctx.globalAlpha = state.opacity;
+    ctx.drawImage(state.qrImg, cx - w / 2, cy - h / 2, w, h);
+    ctx.globalAlpha = 1;
+
+    // 3. 导出格式
+    var sel = els.outFormat.value;
+    var type, ext, quality;
+    if (sel === "same") {
+      type = state.origFile ? state.origFile.type : "";
+      if (!/^image\/(png|jpeg|webp)$/.test(type)) type = "image/png";
+    } else {
+      type = sel;
+    }
+    if (type === "image/jpeg") { ext = "jpg"; quality = 0.95; }
+    else if (type === "image/webp") { ext = "webp"; quality = 0.95; }
+    else { type = "image/png"; ext = "png"; }
+
+    out.toBlob(function (blob) {
+      if (!blob) { toast("导出失败，请重试"); return; }
+      var base = state.origFile && state.origFile.name
+        ? state.origFile.name.replace(/\.[^.]+$/, "")
+        : "image";
+      var name = base + "_已替换二维码." + ext;
+
+      if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+        window.navigator.msSaveOrOpenBlob(blob, name);
+        toast("已保存：" + name);
+        return;
+      }
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      toast("已生成并下载：" + name + "（" + nw + "×" + nh + "）");
+    }, type, quality);
+  });
+
+  /* ---------------- 信息 & 自适应 ---------------- */
+  function updateMeta() {
+    if (!state.origImg) { els.meta.textContent = ""; return; }
+    var nw = state.origImg.naturalWidth;
+    var nh = state.origImg.naturalHeight;
+    var html = "原图像素：<b>" + nw + " × " + nh + "</b><br>" +
+      "输出像素与原图一致，画质不变";
+    if (state.qrImg) {
+      var w = Math.round(state.qr.fw * nw);
+      var h = Math.round(w * state.qr.aspect);
+      html = "原图像素：<b>" + nw + " × " + nh + "</b><br>" +
+        "二维码占位：<b>" + w + " × " + h + " px</b><br>" +
+        "输出像素与原图一致，画质不变";
+    }
+    els.meta.innerHTML = html;
+  }
+
+  // 缩放窗口时重新适配显示区（不影响已保存的比例）
+  var ro = window.ResizeObserver ? new ResizeObserver(function () {
+    if (!state.origImg) return;
+    fitStage();
+    layoutQR();
+  }) : null;
+  if (ro) ro.observe(els.stageWrap);
+  window.addEventListener("resize", function () {
+    if (!state.origImg) return;
+    fitStage();
+    layoutQR();
+  });
+
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+  /* ---------------- 事件绑定 ---------------- */
+  wireDrop(els.dropOrig, els.fileOrig, function (f) {
+    readImage(f, function (img, file) { setOriginal(img, file); });
+  });
+  wireDrop(els.dropQr, els.fileQr, function (f) {
+    readImage(f, function (img, file) { setQr(img, file); });
+  });
+
+  els.delOrig.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    removeOriginal();
+  });
+  els.delQr.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    removeQr();
+  });
+})();
+</script>
+</body>
+</html>
